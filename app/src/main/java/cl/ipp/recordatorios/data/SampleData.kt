@@ -1,6 +1,10 @@
-package cl.ipp.recordatorios
+package cl.ipp.recordatorios.data
 
 import androidx.compose.ui.graphics.Color
+import cl.ipp.recordatorios.model.Category
+import cl.ipp.recordatorios.model.Priority
+import cl.ipp.recordatorios.model.Reminder
+import cl.ipp.recordatorios.model.Status
 
 val sampleReminders: List<Reminder> = listOf(
     Reminder(1, "Enviar informe mensual", Category.Work, Priority.High, Status.Pending),

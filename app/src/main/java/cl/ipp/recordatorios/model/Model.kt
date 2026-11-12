@@ -1,4 +1,4 @@
-package cl.ipp.recordatorios
+package cl.ipp.recordatorios.model
 
 data class Reminder(
     val id: Int,
@@ -6,11 +6,11 @@ data class Reminder(
     val category: Category,
     val priority: Priority,
     val status: Status,
-    val note: String? = null
+    val description: String? = null
 ) {
     init {
-        require(title.trim().length >= 4)
-        require((note?.length ?: 0) <= 200)
+        require(validateTitle(title) == null)
+        require(validateDescription(description.orEmpty()) == null)
     }
 }
 
@@ -32,3 +32,7 @@ sealed class Status(val label: String) {
     object Done : Status("Completado")
     object Overdue : Status("Atrasado")
 }
+
+val categories: List<Category> = listOf(Category.Work, Category.Personal, Category.Health, Category.Study)
+
+val priorities: List<Priority> = listOf(Priority.High, Priority.Medium, Priority.Low)
