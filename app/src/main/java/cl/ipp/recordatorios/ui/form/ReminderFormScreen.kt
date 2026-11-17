@@ -1,4 +1,4 @@
-package cl.ipp.recordatorios.ui.create
+package cl.ipp.recordatorios.ui.form
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,8 +37,8 @@ import cl.ipp.recordatorios.ui.components.OptionSelector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateReminderScreen(
-    viewModel: CreateReminderViewModel,
+fun ReminderFormScreen(
+    viewModel: ReminderFormViewModel,
     onGuardar: () -> Unit,
     onCancelar: () -> Unit
 ) {
@@ -51,7 +51,7 @@ fun CreateReminderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nuevo recordatorio") },
+                title = { Text(if (uiState.isEditing) "Editar recordatorio" else "Nuevo recordatorio") },
                 navigationIcon = {
                     IconButton(onClick = onCancelar) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Cancelar")

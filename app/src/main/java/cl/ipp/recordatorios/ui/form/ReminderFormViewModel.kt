@@ -1,8 +1,10 @@
-package cl.ipp.recordatorios.ui.create
+package cl.ipp.recordatorios.ui.form
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -10,18 +12,21 @@ import cl.ipp.recordatorios.RecordatoriosApplication
 import cl.ipp.recordatorios.data.ReminderRepository
 import cl.ipp.recordatorios.model.Category
 import cl.ipp.recordatorios.model.Priority
+import cl.ipp.recordatorios.model.ReminderDraft
 import cl.ipp.recordatorios.model.validateCategory
 import cl.ipp.recordatorios.model.validateDescription
 import cl.ipp.recordatorios.model.validatePriority
 import cl.ipp.recordatorios.model.validateTitle
+import cl.ipp.recordatorios.navigation.Routes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.IOException
 
-data class CreateReminderUiState(
+data class ReminderFormUiState(
+    val isEditing: Boolean = false,
     val title: String = "",
     val description: String = "",
     val category: Category? = null,
@@ -36,10 +41,32 @@ data class CreateReminderUiState(
     val saveError: String? = null
 )
 
-class CreateReminderViewModel(private val repository: ReminderRepository) : ViewModel() {
+class ReminderFormViewModel(
+    savedStateHandle: SavedStateHandle,
+    private val repository: ReminderRepository
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(CreateReminderUiState())
-    val uiState: StateFlow<CreateReminderUiState> = _uiState.asStateFlow()
+    private val editingId: String? = savedStateHandle.get<String>(Routes.ARG_ID)
+
+    private val _uiState = MutableStateFlow(ReminderFormUiState(isEditing = editingId != null))
+    val uiState: StateFlow<ReminderFormUiState> = _uiState.asStateFlow()
+
+    init {
+        if (editingId != null) {
+            viewModelScope.launch {
+                repository.observeReminder(editingId).first()?.let { reminder ->
+                    _uiState.update {
+                        it.copy(
+                            title = reminder.title,
+                            description = reminder.description.orEmpty(),
+                            category = reminder.category,
+                            priority = reminder.priority
+                        ).validated()
+                    }
+                }
+            }
+        }
+    }
 
     fun onTitleChange(title: String) = _uiState.update { it.copy(title = title).validated() }
 
@@ -55,24 +82,25 @@ class CreateReminderViewModel(private val repository: ReminderRepository) : View
         val priority = state.priority ?: return
         if (!state.canSave) return
         _uiState.update { it.copy(isSaving = true, canSave = false, saveError = null) }
+        val draft = ReminderDraft(
+            title = state.title.trim(),
+            description = state.description.trim().ifEmpty { null },
+            category = category,
+            priority = priority
+        )
         viewModelScope.launch {
             try {
-                repository.saveReminder(
-                    title = state.title.trim(),
-                    description = state.description.trim().ifEmpty { null },
-                    category = category,
-                    priority = priority
-                )
+                if (editingId == null) repository.create(draft) else repository.update(editingId, draft)
                 _uiState.update { it.copy(isSaving = false, saved = true) }
-            } catch (e: IOException) {
+            } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isSaving = false, saveError = "No se pudo guardar el recordatorio. Intenta nuevamente.").validated()
+                    it.copy(isSaving = false, saveError = "No se pudo guardar el recordatorio en el teléfono. Intenta nuevamente.").validated()
                 }
             }
         }
     }
 
-    private fun CreateReminderUiState.validated(): CreateReminderUiState {
+    private fun ReminderFormUiState.validated(): ReminderFormUiState {
         val titleError = validateTitle(title)
         val descriptionError = validateDescription(description)
         val categoryError = validateCategory(category)
@@ -91,7 +119,7 @@ class CreateReminderViewModel(private val repository: ReminderRepository) : View
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as RecordatoriosApplication
-                CreateReminderViewModel(app.repository)
+                ReminderFormViewModel(createSavedStateHandle(), app.container.reminderRepository)
             }
         }
     }

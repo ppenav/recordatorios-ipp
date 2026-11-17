@@ -1,7 +1,16 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+}
+
+val apiProperties = Properties().apply {
+    val local = rootProject.file("api.properties")
+    val source = if (local.exists()) local else rootProject.file("api.properties.example")
+    source.inputStream().use { load(it) }
 }
 
 android {
@@ -12,8 +21,9 @@ android {
         applicationId = "cl.ipp.recordatorios"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "3.0"
+        buildConfigField("String", "API_BASE_URL", "\"${apiProperties.getProperty("API_BASE_URL")}\"")
     }
 
     compileOptions {
@@ -25,6 +35,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -41,5 +52,14 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    testImplementation(libs.junit)
     debugImplementation(libs.androidx.ui.tooling)
 }

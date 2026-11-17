@@ -9,3 +9,6 @@
 .externalNativeBuild
 .cxx
 .kotlin
+/api.properties
+mock-server/data.json
+__pycache__

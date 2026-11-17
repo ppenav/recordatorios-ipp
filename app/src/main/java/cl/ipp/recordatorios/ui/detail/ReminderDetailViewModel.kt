@@ -11,11 +11,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import cl.ipp.recordatorios.RecordatoriosApplication
 import cl.ipp.recordatorios.data.ReminderRepository
 import cl.ipp.recordatorios.model.Reminder
+import cl.ipp.recordatorios.model.Status
 import cl.ipp.recordatorios.navigation.Routes
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed interface ReminderDetailUiState {
@@ -26,20 +29,27 @@ sealed interface ReminderDetailUiState {
 
 class ReminderDetailViewModel(
     savedStateHandle: SavedStateHandle,
-    repository: ReminderRepository
+    private val repository: ReminderRepository
 ) : ViewModel() {
 
-    private val reminderId: Int = checkNotNull(savedStateHandle.get<Int>(Routes.ARG_ID))
+    private val reminderId: String = checkNotNull(savedStateHandle.get<String>(Routes.ARG_ID))
 
-    private val _uiState = MutableStateFlow<ReminderDetailUiState>(ReminderDetailUiState.Loading)
-    val uiState: StateFlow<ReminderDetailUiState> = _uiState.asStateFlow()
+    val uiState: StateFlow<ReminderDetailUiState> = repository.observeReminder(reminderId)
+        .map { reminder -> if (reminder != null) ReminderDetailUiState.Found(reminder) else ReminderDetailUiState.NotFound }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReminderDetailUiState.Loading)
 
-    init {
+    private val _deleted = MutableStateFlow(false)
+    val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
+
+    fun toggleDone(reminder: Reminder) {
+        val next = if (reminder.status == Status.Done) Status.Pending else Status.Done
+        viewModelScope.launch { repository.setStatus(reminder.id, next) }
+    }
+
+    fun delete() {
         viewModelScope.launch {
-            val reminder = repository.getReminder(reminderId)
-            _uiState.update {
-                if (reminder != null) ReminderDetailUiState.Found(reminder) else ReminderDetailUiState.NotFound
-            }
+            repository.delete(reminderId)
+            _deleted.value = true
         }
     }
 
@@ -47,7 +57,7 @@ class ReminderDetailViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as RecordatoriosApplication
-                ReminderDetailViewModel(createSavedStateHandle(), app.repository)
+                ReminderDetailViewModel(createSavedStateHandle(), app.container.reminderRepository)
             }
         }
     }
