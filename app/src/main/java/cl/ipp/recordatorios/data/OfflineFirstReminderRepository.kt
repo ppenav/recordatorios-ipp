@@ -8,6 +8,7 @@ import cl.ipp.recordatorios.data.preferences.SortOrder
 import cl.ipp.recordatorios.data.remote.ApiError
 import cl.ipp.recordatorios.data.remote.ApiResult
 import cl.ipp.recordatorios.data.remote.ReminderApi
+import cl.ipp.recordatorios.data.remote.ReminderDto
 import cl.ipp.recordatorios.data.remote.safeApiCall
 import cl.ipp.recordatorios.model.Reminder
 import cl.ipp.recordatorios.model.ReminderDraft
@@ -140,29 +141,27 @@ class OfflineFirstReminderRepository(
         var firstError: ApiError? = null
         for (entity in dao.getPending()) {
             val deleting = entity.pendingAction == PendingAction.DELETE.name
-            val result = if (deleting) {
-                safeApiCall { api.deleteReminder(entity.id) }
+            val result: ApiResult<*> = if (deleting) {
+                safeApiCall<Unit> { api.deleteReminder(entity.id) }
             } else {
-                safeApiCall { api.upsertReminder(entity.id, entity.toDto()) }
+                safeApiCall<ReminderDto> { api.upsertReminder(entity.id, entity.toDto()) }
             }
-            val alreadyDeleted = deleting && result is ApiResult.Failure && result.code == 404
-            when {
-                result is ApiResult.Success || alreadyDeleted ->
-                    if (deleting) dao.deleteById(entity.id) else dao.markSynced(entity.id, entity.updatedAt)
-                result is ApiResult.Failure -> {
-                    if (result.error != ApiError.NO_CONNECTION) dao.markFailed(entity.id, result.error.message)
-                    if (firstError == null) firstError = result.error
-                    if (result.error.stopsSync) return result.error
-                }
+            val failure = result as? ApiResult.Failure
+            if (failure == null || (deleting && failure.code == 404)) {
+                if (deleting) dao.deleteById(entity.id) else dao.markSynced(entity.id, entity.updatedAt)
+            } else {
+                if (failure.error != ApiError.NO_CONNECTION) dao.markFailed(entity.id, failure.error.message)
+                if (firstError == null) firstError = failure.error
+                if (failure.error.stopsSync) return failure.error
             }
         }
         return firstError
     }
 
     private suspend fun pullRemote(): ApiError? =
-        when (val result = safeApiCall { api.getReminders() }) {
+        when (val result = safeApiCall<List<ReminderDto>> { api.getReminders() }) {
             is ApiResult.Failure -> result.error
-            is ApiResult.Success -> {
+            is ApiResult.Success<List<ReminderDto>> -> {
                 val remote = result.value.orEmpty().filter { it.isValid() }
                 remote.forEach { dto ->
                     val local = dao.getById(dto.id)
